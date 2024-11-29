@@ -1,5 +1,5 @@
 import os
-from typing import Dict, List, Optional
+from typing import Callable, Dict, List, Optional
 
 from langchain.schema import Document
 from langchain.vectorstores.milvus import Milvus
@@ -79,7 +79,7 @@ class MilvusKBService(KBService):
         self._load_milvus()
         # embed_func = get_Embeddings(self.embed_model)
         # embeddings = embed_func.embed_query(query)
-        # docs = self.milvus.similarity_search_with_score_by_vector(embeddings, top_k)
+        self.milvus._select_relevance_score_fn = self._select_relevance_score_fn
         retriever = get_Retriever("milvusvectorstore").from_vectorstore(
             self.milvus,
             top_k=top_k,
@@ -120,6 +120,38 @@ class MilvusKBService(KBService):
         if self.milvus.col:
             self.do_drop_kb()
             self.do_init()
+
+    def _select_relevance_score_fn(self) -> Callable[[float], float]:
+        def _map_l2_to_similarity(l2_distance: float) -> float:
+            """Return a similarity score on a scale [0, 1].
+            It is recommended that the original vector is normalized,
+            Milvus only calculates the value before applying square root.
+            l2_distance range: (0 is most similar, 4 most dissimilar)
+            See
+            https://milvus.io/docs/metric.md?tab=floating#Euclidean-distance-L2
+            """
+            return 1 - l2_distance / 4.0
+
+        def _map_ip_to_similarity(ip_score: float) -> float:
+            """Return a similarity score on a scale [0, 1].
+            It is recommended that the original vector is normalized,
+            ip_score range: (1 is most similar, -1 most dissimilar)
+            See
+            https://milvus.io/docs/metric.md?tab=floating#Inner-product-IP
+            https://milvus.io/docs/metric.md?tab=floating#Cosine-Similarity
+            """
+            return (ip_score + 1) / 2.0
+        
+        metric_type = self.milvus.search_params.get("metric_type")
+        if metric_type == "L2":
+            return _map_l2_to_similarity
+        elif metric_type in ["IP", "COSINE"]:
+            return _map_ip_to_similarity
+        else:
+            raise ValueError(
+                "No supported normalization function"
+                f" for metric type: {metric_type}."
+            )
 
 
 if __name__ == "__main__":

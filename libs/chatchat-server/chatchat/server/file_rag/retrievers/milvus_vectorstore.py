@@ -21,18 +21,9 @@ class MilvusRetriever(VectorStoreRetriever):
         if self.search_type == "similarity":
             docs = self.vectorstore.similarity_search(query, **self.search_kwargs)
         elif self.search_type == "similarity_score_threshold":
-            docs_and_similarities = self.vectorstore.similarity_search_with_score(query, **self.search_kwargs)
+            docs_and_similarities = self.vectorstore.similarity_search_with_relevance_scores(query, **self.search_kwargs)
             score_threshold = self.search_kwargs.get("score_threshold", None)
             
-            if any(
-                similarity < 0.0 or similarity > 1.0
-                for _, similarity in docs_and_similarities
-            ):
-                warnings.warn(
-                    "Relevance scores must be between"
-                    f" 0 and 1, got {docs_and_similarities}"
-                )
-
             if score_threshold is not None:  # can be 0, but not None
                 docs_and_similarities = [
                 doc
@@ -62,22 +53,13 @@ class MilvusRetriever(VectorStoreRetriever):
             )
         elif self.search_type == "similarity_score_threshold":
             docs_and_similarities = (
-                await self.vectorstore.asimilarity_search_with_score(query, **self.search_kwargs)
+                await self.vectorstore.asimilarity_search_with_relevance_scores(query, **self.search_kwargs)
             )
             score_threshold = self.search_kwargs.get("score_threshold", None)
-            
-            if any(
-                similarity < 0.0 or similarity > 1.0
-                for _, similarity in docs_and_similarities
-            ):
-                warnings.warn(
-                    "Relevance scores must be between"
-                    f" 0 and 1, got {docs_and_similarities}"
-                )
 
             if score_threshold is not None:  # can be 0, but not None
                 docs_and_similarities = [
-                (doc, similarity)
+                doc
                 for doc, similarity in docs_and_similarities
                 if similarity >= score_threshold
             ]
