@@ -182,7 +182,8 @@ def kb_chat(api: ApiRequest):
         #     mic_audio = audio_recorder("", icon_size="2x", key="mic_audio")
         prompt = cols[2].chat_input(chat_input_placeholder, key="prompt")
     if prompt:
-        history = get_messages_history(ctx.get("history_len", 0))
+        # history = get_messages_history(ctx.get("history_len", 0)) # there is not history_len key in the ctx dict. So that get_messages_history return empty. Need to change the history_len value in ctx dict.
+          history = get_messages_history(history_len)           
         messages = history + [{"role": "user", "content": prompt}]
         chat_box.user_say(prompt)
 
