@@ -29,7 +29,7 @@ class PGKBService(KBService):
         self.pg_vector = PGVector(
             embedding_function=get_Embeddings(self.embed_model),
             collection_name=self.kb_name,
-            distance_strategy=DistanceStrategy.EUCLIDEAN,
+            distance_strategy=DistanceStrategy.COSINE,
             connection=PGKBService.engine,
             connection_string=Settings.kb_settings.kbs_config.get("pg").get("connection_uri"),
         )
