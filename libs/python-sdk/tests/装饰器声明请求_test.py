@@ -5,9 +5,9 @@ import httpx
 import requests
 from pydantic import BaseModel
 
-from open_chatcaht.api_client import ApiClient
-from open_chatcaht.types.knowledge_base.delete_knowledge_base_param import DeleteKnowledgeBaseParam
-from open_chatcaht.types.response.base import ListResponse
+from open_chatchat.api_client import ApiClient
+from open_chatchat.types.knowledge_base.delete_knowledge_base_param import DeleteKnowledgeBaseParam
+from open_chatchat.types.response.base import ListResponse
 
 base_url = "https://api.example.com"
 headers = {"Authorization": "Bearer token"}

@@ -2,9 +2,10 @@ from typing import Dict, List
 
 from langchain.docstore.document import Document
 from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain.utilities.bing_search import BingSearchAPIWrapper
-from langchain.utilities.duckduckgo_search import DuckDuckGoSearchAPIWrapper
-from langchain.utilities.searx_search import SearxSearchWrapper
+from langchain_community.utilities.bing_search import BingSearchAPIWrapper
+from langchain_community.utilities.duckduckgo_search import DuckDuckGoSearchAPIWrapper
+from langchain_community.utilities.searx_search import SearxSearchWrapper
+from langchain_community.utilities.tavily_search import TavilySearchAPIWrapper
 from markdownify import markdownify
 from strsimpy.normalized_levenshtein import NormalizedLevenshtein
 
@@ -33,7 +34,14 @@ def bing_search(text, config, top_k:int):
     return search.results(text, top_k)
 
 
-def duckduckgo_search(text, config, top_k:int):
+def tavily_search(text, config, top_k: int):
+    search = TavilySearchAPIWrapper(
+        tavily_api_key=config["tavily_key"],
+    )
+    return search.results(text, top_k)
+
+
+def duckduckgo_search(text, config, top_k: int):
     search = DuckDuckGoSearchAPIWrapper()
     return search.results(text, top_k)
 
@@ -86,6 +94,7 @@ def metaphor_search(
 
 SEARCH_ENGINES = {
     "bing": bing_search,
+    "tavily": tavily_search,
     "duckduckgo": duckduckgo_search,
     "metaphor": metaphor_search,
     "searx": searx_search,

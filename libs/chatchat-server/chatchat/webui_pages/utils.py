@@ -661,6 +661,15 @@ class ApiRequest:
             resp, as_json=True, value_func=lambda r: r.get("data", {})
         )
 
+    def list_graphs(self) -> List[str]:
+        """
+        列出所有 graph
+        """
+        resp = self.get("/graphs")
+        return self._get_response_value(
+            resp, as_json=True, value_func=lambda r: r.get("data", {})
+        )
+
     def call_tool(
         self,
         name: str,

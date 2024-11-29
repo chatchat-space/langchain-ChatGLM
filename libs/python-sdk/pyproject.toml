@@ -4,7 +4,7 @@ version = "0.3.0.20240708"
 description = "Langchain-Chatchat sdk"
 authors = ["chatchat"]
 packages = [
-    {include = "open_chatcaht"}
+    {include = "open_chatchat"}
 ]
 
 

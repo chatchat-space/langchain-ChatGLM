@@ -50,7 +50,7 @@ def kb_chat(api: ApiRequest):
     # st.write(chat_box.cur_chat_name)
     # st.write(st.session_state)
 
-    @st.experimental_dialog("模型配置", width="large")
+    @st.dialog("模型配置", width="large")
     def llm_model_setting():
         # 模型
         cols = st.columns(3)
@@ -72,7 +72,7 @@ def kb_chat(api: ApiRequest):
         if st.button("OK"):
             rerun()
 
-    @st.experimental_dialog("重命名会话")
+    @st.dialog("重命名会话")
     def rename_conversation():
         name = st.text_input("会话名称")
         if st.button("OK"):
@@ -223,17 +223,19 @@ def kb_chat(api: ApiRequest):
 
         try:
             for d in client.chat.completions.create(messages=messages, model=llm_model, stream=True, extra_body=extra_body):
-                if first:
-                    chat_box.update_msg("\n\n".join(d.docs), element_index=0, streaming=False, state="complete")
-                    chat_box.update_msg("", streaming=False)
-                    first = False
-                    continue
+                # if first:
+                #     chat_box.update_msg("\n\n".join(d.docs), element_index=0, streaming=False, state="complete")
+                #     chat_box.update_msg("", streaming=False)
+                #     first = False
+                #     continue
+                chat_box.update_msg("\n\n".join(d.docs), element_index=0, streaming=False, state="complete")
+                chat_box.update_msg("", streaming=False)
                 text += d.choices[0].delta.content or ""
                 chat_box.update_msg(text.replace("\n", "\n\n"), streaming=True)
             chat_box.update_msg(text, streaming=False)
             # TODO: 搜索未配置API KEY时产生报错
         except Exception as e:
-            st.error(e.body)
+            st.error(e)
 
     now = datetime.now()
     with tabs[1]:

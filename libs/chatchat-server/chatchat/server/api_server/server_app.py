@@ -11,6 +11,7 @@ from starlette.responses import RedirectResponse
 from chatchat import __version__
 from chatchat.settings import Settings
 from chatchat.server.api_server.chat_routes import chat_router
+from chatchat.server.api_server.graph_routes import graph_router
 from chatchat.server.api_server.kb_routes import kb_router
 from chatchat.server.api_server.openai_routes import openai_router
 from chatchat.server.api_server.server_routes import server_router
@@ -23,8 +24,7 @@ def create_app(run_mode: str = None):
     app = FastAPI(title="Langchain-Chatchat API Server", version=__version__)
     MakeFastAPIOffline(app)
     # Add CORS middleware to allow all origins
-    # 在config.py中设置OPEN_DOMAIN=True，允许跨域
-    # set OPEN_DOMAIN=True in config.py to allow cross-domain
+    # 在basic_settings.yaml中设置OPEN_CROSS_DOMAIN=True，允许跨域
     if Settings.basic_settings.OPEN_CROSS_DOMAIN:
         app.add_middleware(
             CORSMiddleware,
@@ -41,9 +41,12 @@ def create_app(run_mode: str = None):
     app.include_router(chat_router)
     app.include_router(kb_router)
     app.include_router(tool_router)
+    app.include_router(graph_router)
     app.include_router(openai_router)
     app.include_router(server_router)
-
+    if Settings.model_settings.USE_RERANKER:
+        from chatchat.server.api_server.reranker_routes import reranker_router
+        app.include_router(reranker_router)
     # 其它接口
     app.post(
         "/other/completion",

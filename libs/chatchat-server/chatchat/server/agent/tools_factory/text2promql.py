@@ -1,4 +1,3 @@
-import logging
 import requests
 from requests.auth import HTTPBasicAuth
 from urllib.parse import parse_qs
@@ -9,15 +8,16 @@ from langchain_core.output_parsers import StrOutputParser
 from langchain_core.runnables import RunnablePassthrough
 
 from chatchat.server.pydantic_v1 import Field
-from chatchat.server.utils import get_tool_config, get_ChatOpenAI
-# from chatchat.server.api_server.chat_routes import global_model_name
-# from chatchat.configs import (
-#     MAX_TOKENS,
-# )
+from chatchat.server.utils import (
+    get_tool_config,
+    get_default_llm,
+    get_ChatOpenAI,
+    build_logger,
+)
 
 from .tools_registry import BaseToolOutput, regist_tool
 
-logger = logging.getLogger()
+logger = build_logger()
 
 # Prompt for the prom_chain
 PROMETHEUS_PROMPT_TEMPLATE = """ You are an expert in Prometheus, a powerful time-series monitoring service. 
@@ -42,12 +42,14 @@ def execute_promql_request(url: str, params: dict, auth: Optional[HTTPBasicAuth]
     try:
         response = requests.get(url, params=params, auth=auth)
     except requests.exceptions.RequestException as e:
-        return f"PromQL: {promql} 的错误: {e}\n"
+        logger.error(f"PromQL: {promql} 的错误: {e}")
+        return f"PromQL: {promql} 的错误: {e}"
 
     if response.status_code == 200:
-        return f"PromQL: {promql} 的查询结果: {response.json()}\n"
+        return f"PromQL: {promql} 的查询结果: {response.json()}"
     else:
-        return f"PromQL: {promql} 的错误: {response.text}\n"
+        logger.error(f"PromQL: {promql} 请求错误: {response.text}")
+        return f"PromQL: {promql} 请求错误: {response.text}"
 
 
 def query_prometheus(query: str, config: dict) -> str:
@@ -56,12 +58,10 @@ def query_prometheus(query: str, config: dict) -> str:
     password = config["password"]
 
     llm = get_ChatOpenAI(
-        # model_name=global_model_name,
-        # temperature=0.1,
-        # streaming=True,
-        # local_wrap=True,
-        # verbose=True,
-        # max_tokens=MAX_TOKENS,
+        model_name=get_default_llm(),
+        temperature=0.01,
+        streaming=True,
+        local_wrap=False,
     )
 
     prometheus_prompt = ChatPromptTemplate.from_template(PROMETHEUS_PROMPT_TEMPLATE)

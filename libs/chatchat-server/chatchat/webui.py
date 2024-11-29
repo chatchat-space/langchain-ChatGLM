@@ -57,6 +57,7 @@ if __name__ == "__main__":
             [
                 sac.MenuItem("多功能对话", icon="chat"),
                 sac.MenuItem("RAG 对话", icon="database"),
+                # sac.MenuItem("Graph 对话", icon="")
                 sac.MenuItem("知识库管理", icon="hdd-stack"),
             ],
             key="selected_page",

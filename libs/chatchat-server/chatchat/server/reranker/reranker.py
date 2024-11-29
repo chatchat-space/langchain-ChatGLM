@@ -1,131 +1,134 @@
 import os
 import sys
+sys.path.append(os.path.dirname(__file__))
+sys.path.append(os.path.dirname(os.path.dirname(__file__)))
+from chatchat.settings import Settings
+from chatchat.utils import build_logger
+from chatchat.server.utils import api_address
 
-sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
-from typing import Any, List, Optional, Sequence
-
-from langchain.callbacks.manager import Callbacks
-from langchain.retrievers.document_compressors.base import BaseDocumentCompressor
-from langchain_core.documents import Document
-from pydantic import Field, PrivateAttr
-from sentence_transformers import CrossEncoder
-
-
-class LangchainReranker(BaseDocumentCompressor):
-    """Document compressor that uses `Cohere Rerank API`."""
-
-    model_name_or_path: str = Field()
-    _model: Any = PrivateAttr()
-    top_n: int = Field()
-    device: str = Field()
-    max_length: int = Field()
-    batch_size: int = Field()
-    # show_progress_bar: bool = None
-    num_workers: int = Field()
-
-    # activation_fct = None
-    # apply_softmax = False
-
-    def __init__(
-        self,
-        model_name_or_path: str,
-        top_n: int = 3,
-        device: str = "cuda",
-        max_length: int = 1024,
-        batch_size: int = 32,
-        # show_progress_bar: bool = None,
-        num_workers: int = 0,
-        # activation_fct = None,
-        # apply_softmax = False,
-    ):
-        # self.top_n=top_n
-        # self.model_name_or_path=model_name_or_path
-        # self.device=device
-        # self.max_length=max_length
-        # self.batch_size=batch_size
-        # self.show_progress_bar=show_progress_bar
-        # self.num_workers=num_workers
-        # self.activation_fct=activation_fct
-        # self.apply_softmax=apply_softmax
-
-        self._model = CrossEncoder(
-            model_name=model_name_or_path, max_length=max_length, device=device
-        )
-        super().__init__(
-            top_n=top_n,
-            model_name_or_path=model_name_or_path,
-            device=device,
-            max_length=max_length,
-            batch_size=batch_size,
-            # show_progress_bar=show_progress_bar,
-            num_workers=num_workers,
-            # activation_fct=activation_fct,
-            # apply_softmax=apply_softmax
-        )
-
-    def compress_documents(
-        self,
-        documents: Sequence[Document],
-        query: str,
-        callbacks: Optional[Callbacks] = None,
-    ) -> Sequence[Document]:
-        """
-        Compress documents using Cohere's rerank API.
-
-        Args:
-            documents: A sequence of documents to compress.
-            query: The query to use for compressing the documents.
-            callbacks: Callbacks to run during the compression process.
-
-        Returns:
-            A sequence of compressed documents.
-        """
-        if len(documents) == 0:  # to avoid empty api call
-            return []
-        doc_list = list(documents)
-        _docs = [d.page_content for d in doc_list]
-        sentence_pairs = [[query, _doc] for _doc in _docs]
-        results = self._model.predict(
-            sentences=sentence_pairs,
-            batch_size=self.batch_size,
-            #  show_progress_bar=self.show_progress_bar,
-            num_workers=self.num_workers,
-            #  activation_fct=self.activation_fct,
-            #  apply_softmax=self.apply_softmax,
-            convert_to_tensor=True,
-        )
-        top_k = self.top_n if self.top_n < len(results) else len(results)
-
-        values, indices = results.topk(top_k)
-        final_results = []
-        for value, index in zip(values, indices):
-            doc = doc_list[index]
-            doc.metadata["relevance_score"] = value
-            final_results.append(doc)
-        return final_results
+logger = build_logger()
+import numpy as np
+import httpx
 
 
-# if __name__ == "__main__":
-    # 不再适用
-    # from chatchat.configs import (
-    #     MODEL_PATH,
-    #     RERANKER_MAX_LENGTH,
-    #     RERANKER_MODEL,
-    #     SCORE_THRESHOLD,
-    #     TEMPERATURE,
-    #     USE_RERANKER,
-    #     VECTOR_SEARCH_TOP_K,
-    # )
+# def reranker_passage_local(pairs: list[list[str]],topk=1,return_obj="score"):
+#     """
+#     用于本地rerank passage
+#     pairs: list[list[str]]: 传入的passage对
+#     return: list[str]: 返回的rerank结果
+#     """
+#     from FlagEmbedding import FlagReranker
+#     reranker_model = FlagReranker(Settings.model_settings.RERANKER_CONFIG["local_path"], 
+#                                   use_fp16=True,
+#                                   device=Settings.model_settings.RERANKER_CONFIG['device']
+#                                   )
+#     scores = reranker_model.compute_score(pairs,batch_size=32)
+#     if return_obj == "score":
 
-    # if USE_RERANKER:
-    #     reranker_model_path = MODEL_PATH["reranker"].get(
-    #         RERANKER_MODEL, "BAAI/bge-reranker-large"
-    #     )
-    #     print("-----------------model path------------------")
-    #     print(reranker_model_path)
-    #     reranker_model = LangchainReranker(
-    #         top_n=3,
-    #         device="cpu",
-    #         max_length=RERANKER_MAX_LENGTH,
-    #         model_name_or_path=reranker_model_path,
-    #     )
+#         return scores
+#     if return_obj == "index":
+#         sorted_index = np.argsort(scores)[::-1][:topk]
+
+#         return sorted_index
+#     else:
+#         result = [pairs[i][1] for i in sorted_index]
+#         return result
+
+
+async def reranker_passage_api(pairs,topk=1,return_obj="obj"):
+    """
+    用于调用reranker api来对passage进行rerank
+    pairs: list[list[str]]: 传入的passage对
+    topk: int: 返回的topk
+    return_obj: str: 返回的对象类型, score: 返回的rerank分数, index: 返回的rerank结果索引, obj: 返回的rerank结果
+    return: list[str]: 返回的rerank结果
+    """
+    url = f'{api_address()}/reranker/rerank_passage'
+    headers = {'Content-Type': 'application/json'}
+
+    json_data = {"input": pairs}
+    try:
+        client = httpx.AsyncClient()
+        response = await client.post(
+                            url,
+                            headers=headers,
+                            json=json_data,
+                            timeout=360,
+                            )
+        if response.status_code == 200:
+            scores = [i['score'] for i in  response.json()['data'] ] 
+            if return_obj == "score":
+
+                return scores
+            if return_obj == "index":
+                sorted_index = np.argsort(scores)[::-1][:topk]
+
+                return sorted_index
+            elif "obj":
+                sorted_index = np.argsort(scores)[::-1][:topk]
+                result = [pairs[i][1] for i in sorted_index]
+                return result
+            else:
+                raise ValueError("return_obj参数错误")
+    except Exception as e:
+        logger.error("调用reranker api失败.")
+        logger.error(e)
+        return None
+
+
+async def reranker_docs(query:str,corpus,top_k:int=3):
+    """rerank retrieved docs
+
+    Args:
+        query (_type_): target query
+        corpus (_type_): retrieved docs
+        top_k (_type_): _description_
+
+    Returns:
+        _type_: a list-like object of reranked docs, with length of top_k, 
+                whose element is same as the input corpus's element
+    """
+
+    if hasattr(corpus[0],"text"):
+        pairs = [[query, doc.text] for doc in corpus]
+    elif isinstance(corpus[0],dict) and "page_content" in corpus[0]:
+        pairs = [[query, doc["page_content"]] for doc in corpus]
+    elif isinstance(corpus[0],dict) and "content" in corpus[0]:
+        pairs = [[query, doc["content"]] for doc in corpus]
+    elif isinstance(corpus[0],dict) and "text" in corpus[0]:
+        pairs = [[query, doc["text"]] for doc in corpus]
+    elif hasattr(corpus[0],"page_content"):
+        pairs = [[query, doc.page_content] for doc in corpus]
+    elif hasattr(corpus[0],"content"):
+        pairs = [[query, doc.content] for doc in corpus]
+    elif isinstance(corpus[0],str):
+        pairs = [[query, doc] for doc in corpus]
+    corpus_index = await reranker_passage_api(pairs=pairs, topk=len(corpus), return_obj="index")
+    if corpus_index is not None:
+
+        result = [corpus[i] for i in corpus_index][: top_k]
+        return result
+    else:
+        return corpus[:top_k]
+
+
+if __name__ == '__main__':
+    import asyncio
+    from chatchat.server.knowledge_base.kb_doc_api import search_docs
+    pairs = [
+    ["北京是中国的首都","北京是中国的首都"]
+        ]
+
+    # print(reranker_passage_api(pairs))
+    docs = search_docs(
+        query="如何高质量提问",
+        knowledge_base_name="samples",
+        top_k=3,
+        score_threshold=2.0,
+        file_name="",
+        metadata={},
+    )
+    print(docs)
+    reranked_docs = asyncio.run(reranker_docs("如何高质量提问", docs))
+    print(reranked_docs)
+    print("done")

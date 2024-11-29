@@ -117,7 +117,7 @@ class AgentExecutorAsyncIteratorCallbackHandler(AsyncIteratorCallbackHandler):
 
     async def on_tool_end(
         self,
-        output: str,
+        output: Any,
         *,
         run_id: UUID,
         parent_run_id: Optional[UUID] = None,
@@ -125,12 +125,14 @@ class AgentExecutorAsyncIteratorCallbackHandler(AsyncIteratorCallbackHandler):
         **kwargs: Any,
     ) -> None:
         """Run when tool ends running."""
+        # if not isinstance(output, str):
+        #     output = str(output)
         data = {
             "run_id": str(run_id),
             "status": AgentStatus.tool_end,
-            "tool_output": output,
+            "tool_output": output.data,
         }
-        # self.done.clear()
+
         self.queue.put_nowait(dumps(data))
 
     async def on_tool_error(

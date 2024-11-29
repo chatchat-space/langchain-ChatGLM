@@ -62,7 +62,7 @@
 - 使用 Agent 功能时，`stream` 参数必须指定为 `True`。因为 Agent 是分步执行的，必须通过 SSE 把每个步骤逐一输出。注意：此时 SSE 的单元是执行步骤，LLM 的输出是非流式的。
 
 调用示例：
-- 纯 LLM 对话：
+- LLM 对话：
     ```python3
     base_url = "http://127.0.0.1:7861/chat"
     data = {
@@ -108,6 +108,7 @@
     ```
 - Agent 对话  
     以下示例仅展示使用 `requests` 的情况，可以自行尝试使用 `openai sdk` 进行请求，参数和输出内容是一样的。
+    - langchain agent 对话示例:
     ```python3
     base_url = "http://127.0.0.1:7861/chat"
     tools = list(requests.get(f"http://127.0.0.1:7861/tools").json()["data"])
@@ -157,6 +158,44 @@
         IMAGE = 2
         AUDIO = 3
         VIDEO = 4
+    ```
+    - langgraph agent 对话示例:
+    ```python3
+    base_url = "http://127.0.0.1:7861/chat"
+    tools = list(requests.get(f"http://127.0.0.1:7861/tools").json()["data"])
+    data = {
+        "messages": [
+            {'role': 'user', 'content': 'The youtube video of Xiao Yixian in Fights Break Sphere?'},
+        ],
+        "model": "gpt-4o",      # 必填, 部分模型推理能力有限, 可能无法实现较复杂的推理过程, 如有条件请尽量选在线 api.
+        "tools": tools,         # 必填, agent 可使用 tools.
+        "stream": False,        # 可选, 默认为 False,
+                                # 原因: 部分模型推理平台在"不使用 vllm 启动 llm 时"的场景下不支持 "stream = Ture".
+                                # 为考虑兼容性, 默认为 False, 使用在线 API 或满足条件的用户可设置为 True.
+        "temperature": 0.01,    # 可选, 但为保障大部分用户使用体验, 代码中优先指定为 `LLM_MODEL_CONFIG.action_model.temperature`, 
+                                # 即 0.0.1, 硬性需求接口传入 temperature 的开发者请查看 graph_chat._create_agent_models.
+        "graph": "base_graph",  # 必填, 用来启动 graph agent, 且指定 agent 使用的 graph 流程, 目前支持: base_graph 和 plan_and_execute.
+        "conversation_id": 1,   # 必填, checkpoint 以 conversation_id 为纬度记录历史上下文.
+    }
+
+    import requests
+    response = requests.post(f"{base_url}/chat/completions", json=data, stream=True)
+    for line in response.iter_content(None, decode_unicode=True):
+        print(line)
+    ```
+    ```shell
+    stream = True
+    # 输出:
+    data: {"id": "chataae129d2-2832-4895-941f-9debfbb60c39", "object": "chat.completion.chunk", "model": "gpt-4o-mini", "created": 1723472598, "status": 5, "message_type": 1, "message_id": "6505a824f2864c79b3d93b70ef588d8d", "is_ref": false, "choices": [{"delta": {"content": "node: human  \ncontent: The youtube video of Xiao Yixian in Fights Break Sphere?  \n", "tool_calls": []}, "role": "assistant"}]}
+    data: {"id": "chat1c7b1c90-778c-49e2-aa3f-60b38464a6bb", "object": "chat.completion.chunk", "model": "gpt-4o-mini", "created": 1723472598, "status": 5, "message_type": 1, "message_id": "6505a824f2864c79b3d93b70ef588d8d", "is_ref": false, "choices": [{"delta": {"content": "node: human  \ncontent: The youtube video of Xiao Yixian in Fights Break Sphere?  \n", "tool_calls": []}, "role": "assistant"}]}
+    data: {"id": "chat6e7ca234-a6f3-441a-bbf0-d8decd9fa33e", "object": "chat.completion.chunk", "model": "gpt-4o-mini", "created": 1723472600, "status": 5, "message_type": 1, "message_id": "6505a824f2864c79b3d93b70ef588d8d", "is_ref": false, "choices": [{"delta": {"content": "node: ai  \ncontent: tool_calls:  \n  - type: tool_call  \n    name: search_youtube  \n    args: {'query': 'Xiao Yixian Fights Break Sphere'}  \n  \n", "tool_calls": []}, "role": "assistant"}]}
+    data: {"id": "chat596297dc-ce38-4c57-9ac3-b7727069b4ce", "object": "chat.completion.chunk", "model": "gpt-4o-mini", "created": 1723472602, "status": 5, "message_type": 1, "message_id": "6505a824f2864c79b3d93b70ef588d8d", "is_ref": false, "choices": [{"delta": {"content": "node: tool  \nname: search_youtube  \ncontent: ['https://www.youtube.com/watch?v=em-VpMhQcZs&pp=ygUfWGlhbyBZaXhpYW4gRmlnaHRzIEJyZWFrIFNwaGVyZQ%3D%3D', 'https://www.youtube.com/watch?v=bqV-5qKtdTQ&pp=ygUfWGlhbyBZaXhpYW4gRmlnaHRzIEJyZWFrIFNwaGVyZQ%3D%3D']  \n", "tool_calls": []}, "role": "assistant"}]}
+    data: {"id": "chat27c1317b-14de-48c6-88ed-e9c15f27206e", "object": "chat.completion.chunk", "model": "gpt-4o-mini", "created": 1723472605, "status": 5, "message_type": 1, "message_id": "6505a824f2864c79b3d93b70ef588d8d", "is_ref": false, "choices": [{"delta": {"content": "node: ai  \ncontent: Here are some YouTube videos featuring Xiao Yixian in \"Fights Break Sphere\":\n\n1. [Xiao Yixian in Fights Break Sphere - Video 1](https://www.youtube.com/watch?v=em-VpMhQcZs&pp=ygUfWGlhbyBZaXhpYW4gRmlnaHRzIEJyZWFrIFNwaGVyZQ%3D%3D)\n2. [Xiao Yixian in Fights Break Sphere - Video 2](https://www.youtube.com/watch?v=bqV-5qKtdTQ&pp=ygUfWGlhbyBZaXhpYW4gRmlnaHRzIEJyZWFrIFNwaGVyZQ%3D%3D)\n\nFeel free to check them out!  \n", "tool_calls": []}, "role": "assistant"}]}
+    ```
+    ```shell
+    stream = False
+    # 输出:
+    {"id":"chat3609a5e1-fadd-4bc4-8280-4b3d8fb2c86e","object":"chat.completion","model":null,"created":null,"status":5,"message_type":1,"message_id":"3be4e0db8eed4747af6b5c647fcd7891","is_ref":false,"choices":[{"message":{"role":"assistant","content":"node: human  \ncontent: The youtube video of Xiao Yixian in Fights Break Sphere?  \nnode: human  \ncontent: The youtube video of Xiao Yixian in Fights Break Sphere?  \nnode: ai  \ncontent: tool_calls:  \n  - type: tool_call  \n    name: search_youtube  \n    args: {'query': 'Xiao Yixian Fights Break Sphere'}  \n  \nnode: tool  \nname: search_youtube  \ncontent: ['https://www.youtube.com/watch?v=em-VpMhQcZs&pp=ygUfWGlhbyBZaXhpYW4gRmlnaHRzIEJyZWFrIFNwaGVyZQ%3D%3D', 'https://www.youtube.com/watch?v=AAE3tXMQ2Vo&pp=ygUfWGlhbyBZaXhpYW4gRmlnaHRzIEJyZWFrIFNwaGVyZQ%3D%3D']  \n","finish_reason":"stop","tool_calls":[]}}]}
     ```
 - 知识库对话（LLM 自动解析参数）  
     直接指定 `tool_choice` 为 `"search_local_knowledgebase"`工具即可使用知识库对话功能。其它工具对话类似。

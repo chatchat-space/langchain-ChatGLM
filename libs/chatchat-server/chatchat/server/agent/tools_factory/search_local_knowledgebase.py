@@ -39,7 +39,7 @@ def search_local_knowledgebase(
     ),
     query: str = Field(description="Query for Knowledge Search"),
 ):
-    """"""
+    """temp docstr to avoid langchain error"""
     tool_config = get_tool_config("search_local_knowledgebase")
     ret = search_knowledgebase(query=query, database=database, config=tool_config)
     return BaseToolOutput(ret, format=format_context)

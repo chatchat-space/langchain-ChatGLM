@@ -40,6 +40,9 @@ class BasicSettings(BaseFileSettings):
     HTTPX_DEFAULT_TIMEOUT: float = 300
     """httpx 请求默认超时时间（秒）。如果加载模型或对话较慢，出现超时错误，可以适当加大该值。"""
 
+    USE_RICH_MARKDOWN: bool = False
+    """使用 streamlit-markdown 实现更丰富的渲染"""
+
     # @computed_field
     @cached_property
     def PACKAGE_ROOT(self) -> Path:
@@ -89,13 +92,16 @@ class BasicSettings(BaseFileSettings):
         (p / "openai_files").mkdir(parents=True, exist_ok=True)
         return p
 
+    @cached_property
+    def DB_ROOT_PATH(self) -> Path:
+        """sqlite数据库默认存储路径。如果使用其它数据库，请直接修改SQLALCHEMY_DATABASE_URI。"""
+        p = self.KB_ROOT_PATH / "info.db"
+        return p
+
     KB_ROOT_PATH: str = str(CHATCHAT_ROOT / "data/knowledge_base")
     """知识库默认存储路径"""
 
-    DB_ROOT_PATH: str = str(CHATCHAT_ROOT / "data/knowledge_base/info.db")
-    """数据库默认存储路径。如果使用sqlite，可以直接修改DB_ROOT_PATH；如果使用其它数据库，请直接修改SQLALCHEMY_DATABASE_URI。"""
-
-    SQLALCHEMY_DATABASE_URI:str = "sqlite:///" + str(CHATCHAT_ROOT / "data/knowledge_base/info.db")
+    SQLALCHEMY_DATABASE_URI: str = "sqlite:///" + str(CHATCHAT_ROOT / "data/knowledge_base/info.db")
     """知识库信息数据库连接URI"""
 
     OPEN_CROSS_DOMAIN: bool = False
@@ -112,6 +118,9 @@ class BasicSettings(BaseFileSettings):
 
     WEBUI_SERVER: dict = {"host": DEFAULT_BIND_HOST, "port": 8501}
     """WEBUI 服务器地址"""
+
+    LANG_SMITH: dict = {"OPEN_LANGSMITH": False, "LANGCHAIN_API_KEY": "lsv2_sk_xxx", "LANGCHAIN_PROJECT": ""}
+    """LangSmith 是否开启"""
 
     def make_dirs(self):
         '''创建所有数据目录'''
@@ -135,7 +144,7 @@ class KBSettings(BaseFileSettings):
     DEFAULT_KNOWLEDGE_BASE: str = "samples"
     """默认使用的知识库"""
 
-    DEFAULT_VS_TYPE: t.Literal["faiss", "milvus", "zilliz", "pg", "es", "relyt", "chromadb"] = "faiss"
+    DEFAULT_VS_TYPE: t.Literal["faiss", "milvus", "zilliz", "pg", "es", "relyt", "chromadb", "sqlite"] = "faiss"
     """默认向量库/全文检索引擎类型"""
 
     CACHED_VS_NUM: int = 1
@@ -153,7 +162,7 @@ class KBSettings(BaseFileSettings):
     VECTOR_SEARCH_TOP_K: int = 3 # TODO: 与 tool 配置项重复
     """知识库匹配向量数量"""
 
-    SCORE_THRESHOLD: float = 2.0
+    SCORE_THRESHOLD: float = 0.7
     """知识库匹配相关度阈值，取值范围在0-2之间，SCORE越小，相关度越高，取到2相当于不筛选，建议设置在0.5左右"""
 
     DEFAULT_SEARCH_ENGINE: t.Literal["bing", "duckduckgo", "metaphor", "searx"] = "duckduckgo"
@@ -164,6 +173,12 @@ class KBSettings(BaseFileSettings):
 
     ZH_TITLE_ENHANCE: bool = False
     """是否开启中文标题加强，以及标题增强的相关配置"""
+
+    ADAPTIVE_DOCUMENTS: bool = False
+    """是否开启利用LLM的生成前自评估机制筛选召回的文档"""
+
+    SELF_VERIFY_EVIDENCE: bool = False
+    """是否开启利用LLM的生成后自验证机制筛选召回的证据"""
 
     PDF_OCR_THRESHOLD: t.Tuple[float, float] = (0.6, 0.6)
     """
@@ -214,10 +229,15 @@ class KBSettings(BaseFileSettings):
                 },
                 "index_params": {
                     "metric_type": "L2",
-                    "index_type": "HNSW"
+                    "index_type": "HNSW",
+                    "params": {
+                        "efConstruction": 128,
+                        "M": 16,
+                        "efSearch": 128}
                 }
             },
-            "chromadb": {}
+            "chromadb": {},
+            "sqlite": {"uri": None},
         }
     """可选向量库类型及对应配置"""
 
@@ -312,26 +332,37 @@ class ApiModelSettings(BaseFileSettings):
     DEFAULT_EMBEDDING_MODEL: str = "bge-m3"
     """默认选用的 Embedding 名称"""
 
-    Agent_MODEL: str = "" # TODO: 似乎与 LLM_MODEL_CONFIG 重复了
-    """AgentLM模型的名称 (可以不指定，指定之后就锁定进入Agent之后的Chain的模型，不指定就是 DEFAULT_LLM_MODEL)"""
+    # Agent_MODEL: str = ""  # TODO: 似乎与 LLM_MODEL_CONFIG 重复了
+    # """AgentLM模型的名称 (可以不指定，指定之后就锁定进入Agent之后的Chain的模型，不指定就是 DEFAULT_LLM_MODEL)"""
 
-    HISTORY_LEN: int = 3
+    HISTORY_LEN: int = 10
     """默认历史对话轮数"""
+    """LangGraph Agent 单轮对话可能包含 4 个 Node, 故默认设置为 6"""
 
-    MAX_TOKENS: t.Optional[int] = None # TODO: 似乎与 LLM_MODEL_CONFIG 重复了
+    MAX_TOKENS: t.Optional[int] = None  # TODO: 似乎与 LLM_MODEL_CONFIG 重复了
     """大模型最长支持的长度，如果不填写，则使用模型默认的最大长度，如果填写，则为用户设定的最大长度"""
 
     TEMPERATURE: float = 0.7
     """LLM通用对话参数"""
-
+    # 新增重排序模型
+    USE_RERANKER: bool = False
+    """是否使用重排模型"""
+    RERANKER_CONFIG: t.Dict[str, t.Any] = {
+            "model": "bge-reranker-v2-m3",
+            "topk": 5,
+            # "return_obj": "index",
+            "local_path":"./model_hub/bge-reranker-v2-m3",
+            "num_workers":1,
+            "device":"cpu",
+            "limit_concurrency": 100
+        }
     SUPPORT_AGENT_MODELS: t.List[str] = [
             "chatglm3-6b",
             "glm-4",
-            "openai-api",
             "Qwen-2",
             "qwen2-instruct",
-            "gpt-3.5-turbo",
             "gpt-4o",
+            "gpt-4o-mini",
         ]
     """支持的Agent模型"""
 
@@ -452,8 +483,8 @@ class ApiModelSettings(BaseFileSettings):
                 "api_key": "sk-proj-",
                 "api_concurrencies": 5,
                 "llm_models": [
+                    "gpt-4o-mini",
                     "gpt-4o",
-                    "gpt-3.5-turbo",
                 ],
                 "embed_models": [
                     "text-embedding-3-small",
@@ -469,6 +500,29 @@ class ToolSettings(BaseFileSettings):
     model_config = SettingsConfigDict(yaml_file=CHATCHAT_ROOT / "tool_settings.yaml",
                                       json_file=CHATCHAT_ROOT / "tool_settings.json",
                                       extra="allow")
+
+    DEFAULT_GRAPH: str = "base_graph"
+    """默认使用的 graph"""
+
+    SUPPORT_GRAPHS: t.List[str] = [
+        "base_graph",
+        "plan_and_execute",
+        "reflexion",
+    ]
+    """支持的 graph"""
+
+    RECURSION_LIMIT: int = 50
+    """
+    工作流允许 agent 推理最大轮数, 设定数值 = 单次执行限制最大推理轮数 * 2
+    如果不设置或设置为 0 则取 50 (25轮)
+    """
+
+    GRAPH_MEMORY_TYPE: t.Literal["memory", "sqlite", "postgres"] = "memory"
+    """
+    langgraph 历史记录类型。
+    默认为 memory, 无法持久化，仅在程序运行期间用于获取历史消息。
+    如果设为 sqlite/postgres，则自动使用 SQLALCHEMY_DATABASE_URI
+    """
 
     search_local_knowledgebase: dict = {
         "use": False,
@@ -493,6 +547,9 @@ class ToolSettings(BaseFileSettings):
             "bing": {
                 "bing_search_url": "https://api.bing.microsoft.com/v7.0/search",
                 "bing_key": "",
+            },
+            "tavily": {
+                "tavily_key": "",
             },
             "metaphor": {
                 "metaphor_api_key": "",
@@ -561,7 +618,6 @@ class ToolSettings(BaseFileSettings):
         # 务必评估是否需要开启read_only,开启后会对sql语句进行检查，请确认text2sql.py中的intercept_sql拦截器是否满足你使用的数据库只读要求
         # 优先推荐从数据库层面对用户权限进行限制
         "read_only": False,
-        # 限定返回的行数
         "top_k": 50,
         # 是否返回中间步骤
         "return_intermediate_steps": True,
@@ -608,11 +664,10 @@ class ToolSettings(BaseFileSettings):
 
     url_reader: dict = {
         "use": False,
-        "timeout": "10000",
+        "timeout": 10000,
     }
     '''URL内容阅读（https://r.jina.ai/）工具配置项
     请确保部署的网络环境良好，以免造成超时等问题'''
-
 
 
 class PromptSettings(BaseFileSettings):

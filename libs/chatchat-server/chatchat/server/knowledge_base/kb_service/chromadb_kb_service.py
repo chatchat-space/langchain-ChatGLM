@@ -124,6 +124,8 @@ class ChromaKBService(KBService):
     def do_clear_vs(self):
         # Clearing the vector store might be equivalent to dropping and recreating the collection
         self.do_drop_kb()
+        collection = self.client.get_or_create_collection(self.kb_name)
+        self._load_chroma()
 
     def do_delete_doc(self, kb_file: KnowledgeFile, **kwargs):
         return self.chroma._collection.delete(where={"source": kb_file.filepath})

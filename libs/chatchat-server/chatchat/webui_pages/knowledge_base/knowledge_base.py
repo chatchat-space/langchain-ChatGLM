@@ -179,7 +179,7 @@ def knowledge_base_page(api: ApiRequest, is_lite: bool = None):
             expanded=True,
         ):
             cols = st.columns(3)
-            chunk_size = cols[0].number_input("单段文本最大长度：", 1, 1000, Settings.kb_settings.CHUNK_SIZE)
+            chunk_size = cols[0].number_input("单段文本最大长度：", 1, 32768, Settings.kb_settings.CHUNK_SIZE)
             chunk_overlap = cols[1].number_input(
                 "相邻文本重合长度：", 0, chunk_size, Settings.kb_settings.OVERLAP_SIZE
             )

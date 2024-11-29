@@ -111,15 +111,7 @@ LOADER_DICT = {
     ],
     "RapidOCRLoader": [".png", ".jpg", ".jpeg", ".bmp"],
     "UnstructuredFileLoader": [
-        ".eml",
-        ".msg",
-        ".rst",
-        ".rtf",
         ".txt",
-        ".xml",
-        ".epub",
-        ".odt",
-        ".tsv",
     ],
     "UnstructuredEmailLoader": [".eml", ".msg"],
     "UnstructuredEPubLoader": [".epub"],
@@ -459,7 +451,7 @@ def files2docs_in_thread(
         yield result
 
 
-def format_reference(kb_name: str, docs: List[Dict], api_base_url: str="") -> List[Dict]:
+def format_reference_kb(kb_name: str, docs: List[Dict], api_base_url: str="") -> List[Dict]:
     '''
     将知识库检索结果格式化为参考文档的格式
     '''
@@ -484,6 +476,32 @@ def format_reference(kb_name: str, docs: List[Dict], api_base_url: str="") -> Li
         source_documents.append(ref)
     
     return source_documents
+
+
+
+def format_reference_se(docs:List[Dict]) -> List[Dict]:
+    """
+    将搜索引擎检索结果格式化为参考文档的格式
+    docs: 搜索引擎检索结果
+    doc_soruce: 文档来源，kb表示知识库，se表示搜索引擎
+    """
+
+    source_documents = [
+        f"""出处 [{i + 1}] [{d['metadata']['filename']}]({d['metadata']['source']}) \n\n{d['page_content']}\n\n""" 
+                        for i,d in enumerate(docs)
+                        ]
+
+    return source_documents
+
+
+def format_reference(kb_name: str, docs: List[Dict], api_base_url: str="", doc_source: str="kb") -> List[Dict]:
+    '''
+    将知识库检索结果格式化为参考文档的格式
+    '''
+    if doc_source == "kb":
+        return format_reference_kb(kb_name, docs, api_base_url)
+    elif doc_source == "se":
+        return format_reference_se(docs)
 
 
 if __name__ == "__main__":

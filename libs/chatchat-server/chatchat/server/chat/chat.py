@@ -6,7 +6,7 @@ from typing import AsyncIterable, List
 from fastapi import Body
 from langchain.chains import LLMChain
 from langchain.prompts.chat import ChatPromptTemplate
-from langchain_core.messages import AIMessage, HumanMessage, convert_to_messages
+from langchain_core.messages import convert_to_messages
 from sse_starlette.sse import EventSourceResponse
 
 from chatchat.settings import Settings
@@ -29,7 +29,6 @@ from chatchat.server.utils import (
     get_default_llm,
     build_logger,
 )
-
 
 logger = build_logger()
 
@@ -143,9 +142,12 @@ async def chat(
             models, prompts = create_models_from_config(
                 callbacks=callbacks, configs=chat_model_config, stream=stream, max_tokens=max_tokens
             )
+
             all_tools = get_tool().values()
+
             tools = [tool for tool in all_tools if tool.name in tool_config]
             tools = [t.copy(update={"callbacks": callbacks}) for t in tools]
+
             full_chain = create_models_chains(
                 prompts=prompts,
                 models=models,
@@ -159,9 +161,7 @@ async def chat(
 
             _history = [History.from_data(h) for h in history]
             chat_history = [h.to_msg_tuple() for h in _history]
-
             history_message = convert_to_messages(chat_history)
-
             task = asyncio.create_task(
                 wrap_done(
                     full_chain.ainvoke(
@@ -213,12 +213,11 @@ async def chat(
                             data["message_type"] = message_type
                     except:
                         ...
-                text_value = data.get("text", "")
-                content = text_value if isinstance(text_value, str) else str(text_value)
+
                 ret = OpenAIChatOutput(
                     id=f"chat{uuid.uuid4()}",
                     object="chat.completion.chunk",
-                    content=content,
+                    content=data.get("text", ""),
                     role="assistant",
                     tool_calls=data["tool_calls"],
                     model=models["llm_model"].model_name,

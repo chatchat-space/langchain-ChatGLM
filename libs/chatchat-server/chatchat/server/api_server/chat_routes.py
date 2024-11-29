@@ -8,6 +8,7 @@ from sse_starlette import EventSourceResponse
 
 from chatchat.server.api_server.api_schemas import OpenAIChatInput
 from chatchat.server.chat.chat import chat
+from chatchat.server.chat.graph_chat import graph_chat
 from chatchat.server.chat.kb_chat import kb_chat
 from chatchat.server.chat.feedback import chat_feedback
 from chatchat.server.chat.file_chat import file_chat
@@ -54,6 +55,7 @@ async def chat_completions(
     - tool_choice
         - extra_body 中包含 tool_input: 直接调用 tool_choice(tool_input)
         - extra_body 中不包含 tool_input: 通过 agent 调用 tool_choice
+        - extra_body 中包含 graph: 指定 agent 运行时使用的 graph
     - tools: agent 对话
     - 其它：LLM 对话
     以后还要考虑其它的组合（如文件对话）
@@ -87,9 +89,7 @@ async def chat_completions(
                             "parameters": t.args,
                         },
                     }
-
     conversation_id = extra.get("conversation_id")
-
     # chat based on result from one choiced tool
     if body.tool_choice:
         tool = get_tool(body.tool_choice["function"]["name"])
@@ -153,7 +153,6 @@ async def chat_completions(
                     extra_json=extra_json,
                     header=header,
                 )
-
     # agent chat with tool calls
     if body.tools:
         try:
@@ -173,6 +172,24 @@ async def chat_completions(
         chat_model_config = {}  # TODO: 前端支持配置模型
         tool_names = [x["function"]["name"] for x in body.tools]
         tool_config = {name: get_tool_config(name) for name in tool_names}
+
+        # todo: 目前需要同时兼容 graph agent 和传统 agent 两种方式聊天接口, 后续方案待确定
+        if graph := extra.get("graph"):
+            result = await graph_chat(
+                query=body.messages[-1]["content"],
+                model=body.model,
+                graph=graph,
+                metadata=extra.get("metadata", {}),
+                conversation_id=extra.get("conversation_id", ""),
+                message_id=message_id,
+                chat_model_config=extra.get("chat_model_config", chat_model_config),
+                tool_config=extra.get("tool_config", tool_config),
+                max_tokens=body.max_tokens,
+                temperature=body.temperature,
+                stream=body.stream,
+            )
+            return result
+
         result = await chat(
             query=body.messages[-1]["content"],
             metadata=extra.get("metadata", {}),
@@ -187,7 +204,7 @@ async def chat_completions(
         )
         return result
     else:  # LLM chat directly
-        try: # query is complex object that unable add to db when using qwen-vl-chat 
+        try:  # query is complex object that unable add to db when using qwen-vl-chat
             message_id = (
                 add_message_to_db(
                     chat_type="llm_chat",

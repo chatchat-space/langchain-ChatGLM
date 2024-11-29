@@ -1,8 +1,8 @@
 import os
 
-from langchain.docstore.in_memory import InMemoryDocstore
 from langchain.schema import Document
-from langchain.vectorstores.faiss import FAISS
+from langchain_community.vectorstores.faiss import FAISS
+from langchain_community.docstore.in_memory import InMemoryDocstore
 
 from chatchat.settings import Settings
 from chatchat.server.knowledge_base.kb_cache.base import *

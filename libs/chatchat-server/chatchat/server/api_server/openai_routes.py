@@ -24,6 +24,7 @@ logger = build_logger()
 
 
 DEFAULT_API_CONCURRENCIES = 5  # 默认单个模型最大并发数
+
 model_semaphores: Dict[
     Tuple[str, str], asyncio.Semaphore
 ] = {}  # key: (model_name, platform)

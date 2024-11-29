@@ -1,7 +1,6 @@
 import asyncio
 import multiprocessing as mp
 import os
-import requests
 import socket
 import sys
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_completed
@@ -63,7 +62,7 @@ def get_config_platforms() -> Dict[str, Dict]:
     return {m["platform_name"]: m for m in platforms}
 
 
-@cached(max_size=10, ttl=60, algorithm=CachingAlgorithmFlag.LRU)
+@cached(max_size=10, ttl=10, algorithm=CachingAlgorithmFlag.LRU)
 def detect_xf_models(xf_url: str) -> Dict[str, List[str]]:
     '''
     use cache for xinference model detecting to avoid:
@@ -206,6 +205,7 @@ def get_default_llm():
                        f"using {available_llms[0]} instead")
         return available_llms[0]
 
+
 def get_default_embedding():
     available_embeddings = list(get_config_models(model_type="embed").keys())
     if Settings.model_settings.DEFAULT_EMBEDDING_MODEL in available_embeddings:
@@ -214,6 +214,33 @@ def get_default_embedding():
         logger.warning(f"default embedding model {Settings.model_settings.DEFAULT_EMBEDDING_MODEL} is not found in "
                        f"available embeddings, using {available_embeddings[0]} instead")
         return available_embeddings[0]
+
+
+def is_graph_enabled() -> bool:
+    try:
+        import langgraph
+        return True
+    except ImportError:
+        return False
+
+
+def get_default_graph() -> str:
+    available_graphs = Settings.tool_settings.SUPPORT_GRAPHS
+    if Settings.tool_settings.DEFAULT_GRAPH in available_graphs:
+        return Settings.tool_settings.DEFAULT_GRAPH
+    else:
+        logger.warning(f"default graph {Settings.model_settings.DEFAULT_LLM_MODEL} is not found in available graphs, "
+                       f"using {available_graphs[0]} instead")
+        return available_graphs[0]
+
+
+def get_history_len() -> int:
+    return (Settings.model_settings.HISTORY_LEN or
+            Settings.model_settings.LLM_MODEL_CONFIG["action_model"]["history_len"])
+
+
+def get_recursion_limit() -> int:
+    return Settings.tool_settings.RECURSION_LIMIT or 50
 
 
 def get_ChatOpenAI(
@@ -896,6 +923,39 @@ def get_tool(name: str = None) -> Union[BaseTool, Dict[str, BaseTool]]:
         return tools_registry._TOOLS_REGISTRY.get(name)
 
 
+def get_graph(
+        name: str,
+        llm: ChatOpenAI,
+        tools: List[BaseTool],
+        history_len: int,
+        query: str,
+        metadata: Dict[str, Any],
+) -> Dict[str, Any]:
+    """
+    获取已注册的图
+    :param name: 选用 graph 的名称(工作流)
+    :param llm: ChatOpenAI 对象
+    :param tools: 需要调用的 tool 列表
+    :param history_len: 默认历史对话轮数
+    :param query: 用户输入
+    :param metadata: 用户输入元信息
+    :return: 包含已注册的 graph 实例, InputHandler 和 EventHandler
+    """
+    from chatchat.server.agent.graphs_factory import graphs_registry
+    if name in graphs_registry._GRAPHS_REGISTRY:
+        graph_info = graphs_registry._GRAPHS_REGISTRY[name]
+        graph_instance = graph_info["func"](llm=llm, tools=tools, history_len=history_len)
+        input_handler = graph_info["input_handler"](query=query, metadata=metadata)
+        event_handler = graph_info["event_handler"]()
+        return {
+            "graph_instance": graph_instance,
+            "input_handler": input_handler,
+            "event_handler": event_handler
+        }
+    else:
+        raise ValueError(f"Graph '{name}' is not registered.")
+
+
 def get_tool_config(name: str = None) -> Dict:
     from chatchat.settings import Settings
 
@@ -910,10 +970,47 @@ def is_port_in_use(port):
         return sock.connect_ex(("localhost", port)) == 0
 
 
+# langgraph checkpointer 使用的全局 memory
+_AGENT_MEMORY = None
+
+
+def set_graph_memory(memory_type: Literal["memory", "sqlite", "postgres", None] = None):
+    import sqlalchemy as sa
+    global _AGENT_MEMORY  # 声明使用全局 memory
+
+    if memory_type is None:
+        memory_type = Settings.tool_settings.GRAPH_MEMORY_TYPE
+
+    if hasattr(_AGENT_MEMORY, "conn"):
+        _AGENT_MEMORY.conn.close()
+
+    if memory_type == "memory":
+        from langgraph.checkpoint.memory import MemorySaver
+        _AGENT_MEMORY = MemorySaver()
+    elif memory_type == "sqlite":
+        from langgraph.checkpoint.sqlite import SqliteSaver
+
+        engine = sa.create_engine(Settings.basic_settings.SQLALCHEMY_DATABASE_URI)
+        conn = engine.connect().connection
+        _AGENT_MEMORY = SqliteSaver(conn)
+    elif memory_type == "postgres":
+        from langgraph.checkpoint.postgres import PostgresSaver
+
+        engine = sa.create_engine(Settings.basic_settings.SQLALCHEMY_DATABASE_URI)
+        conn = engine.connect().connection
+        _AGENT_MEMORY = PostgresSaver(conn)
+
+
+def get_graph_memory():
+    global _AGENT_MEMORY  # 声明使用全局 memory
+    return _AGENT_MEMORY
+
+
 if __name__ == "__main__":
     # for debug
     print(get_default_llm())
     print(get_default_embedding())
+    print(get_default_graph())
     platforms = get_config_platforms()
     models = get_config_models()
     model_info = get_model_info(platform_name="xinference-auto")
