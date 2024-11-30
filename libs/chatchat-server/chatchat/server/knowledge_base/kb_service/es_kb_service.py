@@ -24,7 +24,7 @@ logger = build_logger()
 class ESKBService(KBService):
     def do_init(self):
         self.kb_path = self.get_kb_path(self.kb_name)
-        self.index_name = os.path.split(self.kb_path)[-1]
+        self.index_name = self.kb_name
         kb_config = Settings.kb_settings.kbs_config[self.vs_type()]
         self.scheme = kb_config.get("scheme", "http")
         self.IP = kb_config["host"]
