@@ -1,17 +1,23 @@
-import json
-
-from sqlalchemy import create_engine
-from sqlalchemy.ext.declarative import DeclarativeMeta, declarative_base
+from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
+from sqlalchemy.ext.declarative import declarative_base, DeclarativeMeta
 from sqlalchemy.orm import sessionmaker
 
-from chatchat.settings import Settings
 
+username = 'root'
+hostname = ''
+database_name = ''
+password = "123456"
 
-engine = create_engine(
-    Settings.basic_settings.SQLALCHEMY_DATABASE_URI,
-    json_serializer=lambda obj: json.dumps(obj, ensure_ascii=False),
+SQLALCHEMY_DATABASE_URI = f"mysql+asyncmy://{username}:{password}@{hostname}/{database_name}?charset=utf8mb4"
+print(SQLALCHEMY_DATABASE_URI)
+
+async_engine = create_async_engine(
+    SQLALCHEMY_DATABASE_URI,
+    echo=True,
 )
 
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+AsyncSessionLocal = sessionmaker(bind=async_engine, class_=AsyncSession, expire_on_commit=False)
 
 Base: DeclarativeMeta = declarative_base()
+
+

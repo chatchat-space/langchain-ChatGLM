@@ -1,48 +1,31 @@
-from contextlib import contextmanager
+from contextlib import asynccontextmanager
+from chatchat.server.db.base import AsyncSessionLocal
 from functools import wraps
 
-from sqlalchemy.orm import Session
 
-from chatchat.server.db.base import SessionLocal
-
-
-@contextmanager
-def session_scope() -> Session:
-    """上下文管理器用于自动获取 Session, 避免错误"""
-    session = SessionLocal()
+@asynccontextmanager
+async def async_session_scope():
+    session = AsyncSessionLocal()
     try:
         yield session
-        session.commit()
-    except:
-        session.rollback()
-        raise
+        await session.commit()
+    except Exception as e:
+        await session.rollback()
+        raise e
     finally:
-        session.close()
+        await session.close()
 
 
-def with_session(f):
+def with_async_session(f):
     @wraps(f)
-    def wrapper(*args, **kwargs):
-        with session_scope() as session:
-            try:
-                result = f(session, *args, **kwargs)
-                session.commit()
-                return result
-            except:
-                session.rollback()
-                raise
-
+    async def wrapper(*args, **kwargs):
+        async with async_session_scope() as session:
+            return await f(session, *args, **kwargs)
     return wrapper
 
 
-def get_db() -> SessionLocal:
-    db = SessionLocal()
-    try:
+async def get_async_db():
+    async with AsyncSessionLocal() as db:
         yield db
-    finally:
-        db.close()
 
 
-def get_db0() -> SessionLocal:
-    db = SessionLocal()
-    return db

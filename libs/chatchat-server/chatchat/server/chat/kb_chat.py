@@ -68,9 +68,16 @@ async def kb_chat(query: str = Body(..., description="用户输入", examples=["
     async def knowledge_base_chat_iterator() -> AsyncIterable[str]:
         try:
             nonlocal history, prompt_name, max_tokens
-
-            history = [History.from_data(h) for h in history]
-
+            message_id = await add_message_to_db(user_id=user_id,
+                                                 conversation_id=conversation_id,
+                                                 conversation_name=conversation_name,
+                                                 prompt_name=prompt_name,
+                                                 query=query)
+            # history = [History.from_data(h) for h in history]
+            conversation_callback = ConversationCallbackHandler(conversation_id=conversation_id,
+                                                                message_id=message_id,
+                                                                chat_type=prompt_name,
+                                                                query=query)
             if mode == "local_kb":
                 kb = KBServiceFactory.get_service_by_name(kb_name)
                 ok, msg = kb.check_embed_model()
@@ -138,7 +145,9 @@ async def kb_chat(query: str = Body(..., description="用户输入", examples=["
 
             if max_tokens in [None, 0]:
                 max_tokens = Settings.model_settings.MAX_TOKENS
-
+            callback = AsyncIteratorCallbackHandler()
+            callbacks = [callback]
+            callbacks.append(conversation_callback)
             llm = get_ChatOpenAI(
                 model_name=model,
                 temperature=temperature,
@@ -164,13 +173,30 @@ async def kb_chat(query: str = Body(..., description="用户输入", examples=["
 
             if len(docs) == 0:  # 如果没有找到相关文档，使用empty模板
                 prompt_name = "empty"
-            prompt_template = get_prompt_template("rag", prompt_name)
+            #prompt_template = get_prompt_template("rag", prompt_name)
+            #input_msg = History(role="user", content=prompt_template).to_msg_template(False)
+            #chat_prompt = ChatPromptTemplate.from_messages(
+                #[i.to_msg_template() for i in history] + [input_msg])
+            memory = ConversationBufferDBMemory(conversation_id=conversation_id,
+                                                llm=llm,
+                                                chat_type=prompt_name,
+                                                message_limit=10)
+            history = await memory.buffer()
+            import numpy as np
+
+            prompt_template = default_prompt.get(prompt_name)
+            system_msg = History(role="system",
+                                 content="你是一位善于结合历史对话信息，以及相关文档回答问题的高智商助手").to_msg_template(
+                is_raw=False)
             input_msg = History(role="user", content=prompt_template).to_msg_template(False)
+
+            history = [History.from_data(h) for h in history]
             chat_prompt = ChatPromptTemplate.from_messages(
-                [i.to_msg_template() for i in history] + [input_msg])
-
+                [i.to_msg_template() for i in history] + [system_msg, input_msg]  # [input_msg]
+            )
             chain = chat_prompt | llm
-
+            #chain = chat_prompt | llm
+      
             # Begin a task that runs in the background.
             task = asyncio.create_task(wrap_done(
                 chain.ainvoke({"context": context, "question": query}),
