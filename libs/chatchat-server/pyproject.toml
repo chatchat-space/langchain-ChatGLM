@@ -46,7 +46,7 @@ websockets = ">=12.0"
 numpy = "~1.24.4"
 pandas = "~1" # test
 pydantic = "~2.7.4"
-httpx = {version = ">=0.25.2", extras = ["brotli", "http2", "socks"]}
+httpx = {version = "0.27.2", extras = ["brotli", "http2", "socks"]}
 python-multipart = "0.0.9"
 # webui
 streamlit = "1.34.0"
